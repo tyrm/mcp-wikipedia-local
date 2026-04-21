@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/tyrm/mcp-wikipedia-local/cmd/pupjournal/action"
+	"github.com/tyrm/mcp-wikipedia-local/cmd/mcp-wiki-local/action"
 	"go.uber.org/zap"
 )
 

@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/tyrm/mcp-wikipedia-local/cmd/pupjournal/action"
-	"github.com/tyrm/mcp-wikipedia-local/cmd/pupjournal/action/server"
-	"github.com/tyrm/mcp-wikipedia-local/cmd/pupjournal/flag"
+	"github.com/tyrm/mcp-wikipedia-local/cmd/mcp-wiki-local/action"
+	"github.com/tyrm/mcp-wikipedia-local/cmd/mcp-wiki-local/action/server"
+	"github.com/tyrm/mcp-wikipedia-local/cmd/mcp-wiki-local/flag"
 	"github.com/tyrm/mcp-wikipedia-local/internal/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
