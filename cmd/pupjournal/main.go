@@ -2,14 +2,15 @@ package main
 
 import (
 	"context"
-	"encoding/gob"
-	"errors"
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/tyrm/mcp-wikipedia-local/cmd/pupjournal/action"
+	"github.com/tyrm/mcp-wikipedia-local/cmd/pupjournal/action/server"
+	"github.com/tyrm/mcp-wikipedia-local/cmd/pupjournal/flag"
+	"github.com/tyrm/mcp-wikipedia-local/internal/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -24,8 +25,6 @@ var Commit string
 const GitShortHashLength = 7
 
 func main() {
-	gob.Register(sessionkeys.SessionKey(0))
-
 	// init logger
 	loggerConfig := zap.NewDevelopmentConfig()
 	loggerConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
@@ -52,7 +51,7 @@ func main() {
 	viper.Set(config.Keys.SoftwareVersion, ver)
 
 	rootCmd := &cobra.Command{
-		Use:           "pupjournal [--config-path File]",
+		Use:           "mcp-wikipedia-local [--config-path File]",
 		Short:         "", // TODO
 		Version:       ver,
 		SilenceErrors: true,
@@ -70,6 +69,7 @@ func main() {
 
 	// add commands
 	rootCmd.AddCommand(serverCommands())
+	rootCmd.AddCommand(scanCommands())
 
 	err = rootCmd.Execute()
 	if err != nil {
@@ -86,15 +86,43 @@ func preRun(cmd *cobra.Command) error {
 		return fmt.Errorf("error reading config: %s", err)
 	}
 
-	// make config directory
-	zap.L().Debug("Creating config directory", zap.String("path", viper.GetString(config.Keys.DataFolder)))
-	if err := os.Mkdir(viper.GetString(config.Keys.DataFolder), os.FileMode(0750)); err != nil && !errors.Is(err, os.ErrExist) {
-		log.Fatal(err)
-	}
-
 	return nil
 }
 
 func run(ctx context.Context, action action.Action, args []string) error {
 	return action(ctx, args)
+}
+
+// serverCommands returns the 'server' subcommand.
+func serverCommands() *cobra.Command {
+	serverCmd := &cobra.Command{
+		Use:   "server",
+		Short: "start server",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return preRun(cmd)
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return run(cmd.Context(), server.Start, args)
+		},
+	}
+	flag.Server(serverCmd, config.Defaults)
+
+	return serverCmd
+}
+
+// scanCommands returns the 'scan' subcommand.
+func scanCommands() *cobra.Command {
+	serverCmd := &cobra.Command{
+		Use:   "scan",
+		Short: "scan the archive",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return preRun(cmd)
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return run(cmd.Context(), server.Start, args)
+		},
+	}
+	flag.Server(serverCmd, config.Defaults)
+
+	return serverCmd
 }

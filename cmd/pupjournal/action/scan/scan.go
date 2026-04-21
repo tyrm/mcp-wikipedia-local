@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var Start action.Action = func(ctx context.Context, args []string) error {
+var Scan action.Action = func(ctx context.Context, args []string) error {
 	ctx, cancel := context.WithCancel(ctx)
 
 	// ** start application **
