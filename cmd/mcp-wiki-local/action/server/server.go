@@ -7,11 +7,17 @@ import (
 	"syscall"
 
 	"github.com/tyrm/mcp-wikipedia-local/cmd/pupjournal/action"
+	"github.com/tyrm/mcp-wikipedia-local/internal/logic"
 	"go.uber.org/zap"
 )
 
 var Start action.Action = func(ctx context.Context, args []string) error {
 	ctx, cancel := context.WithCancel(ctx)
+
+	logicMod := logic.New(&logic.Config{
+		DB:   dbClient,
+		HTTP: httpClient,
+	})
 
 	// ** start application **
 	errChan := make(chan error)
