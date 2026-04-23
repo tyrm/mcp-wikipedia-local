@@ -1,10 +1,18 @@
 package worker
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/tyrm/mcp-wikipedia-local/internal/archive"
+	"github.com/tyrm/mcp-wikipedia-local/internal/search"
+	"github.com/tyrm/mcp-wikipedia-local/internal/search/manticore"
 )
 
 func TestLoadCheckpoint_EmptyPath(t *testing.T) {
@@ -240,5 +248,154 @@ func TestLoadCheckpoint_DuplicateOffsets(t *testing.T) {
 	}
 	if len(got) != 2 {
 		t.Errorf("expected 2 unique entries (deduped), got %d", len(got))
+	}
+}
+
+type fakeEmbedClient struct{ dims int }
+
+func (f *fakeEmbedClient) Embed(_ context.Context, texts []string) ([][]float32, error) {
+	out := make([][]float32, len(texts))
+	for i := range out {
+		out[i] = make([]float32, f.dims)
+	}
+	return out, nil
+}
+
+func (f *fakeEmbedClient) Dims() int { return f.dims }
+
+type fakeSearchClient struct{}
+
+func (f *fakeSearchClient) CreateTable(_ context.Context) error { return nil }
+func (f *fakeSearchClient) BulkInsert(_ context.Context, _ []search.Article) error {
+	return nil
+}
+func (f *fakeSearchClient) SearchBM25(_ context.Context, _ string, _ int) ([]search.Result, error) {
+	return nil, nil
+}
+func (f *fakeSearchClient) SearchKNN(_ context.Context, _ []float32, _ int) ([]search.Result, error) {
+	return nil, nil
+}
+func (f *fakeSearchClient) SearchHybrid(_ context.Context, _ string, _ []float32, _ int) ([]search.Result, error) {
+	return nil, nil
+}
+func (f *fakeSearchClient) TruncateTable(_ context.Context) error { return nil }
+
+func bzip2Compress(t *testing.T, data []byte) []byte {
+	t.Helper()
+	cmd := exec.Command("bzip2", "-c")
+	cmd.Stdin = bytes.NewReader(data)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Skip("bzip2 not available")
+	}
+	return out
+}
+
+func TestRun_ContextCancellation(t *testing.T) {
+	dir := t.TempDir()
+
+	archiveData := bzip2Compress(t, []byte{})
+	archivePath := filepath.Join(dir, "archive.bz2")
+	if err := os.WriteFile(archivePath, archiveData, 0600); err != nil {
+		t.Fatalf("write archive: %v", err)
+	}
+
+	indexData := bzip2Compress(t, []byte{})
+	indexPath := filepath.Join(dir, "index.bz2")
+	if err := os.WriteFile(indexPath, indexData, 0600); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+
+	arch, err := archive.New(&archive.Config{Path: archivePath, IndexPath: indexPath})
+	if err != nil {
+		t.Fatalf("archive.New: %v", err)
+	}
+	defer arch.Close()
+
+	if err := arch.LoadIndex(); err != nil {
+		t.Fatalf("LoadIndex: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	count, err := Run(ctx, arch, &fakeEmbedClient{dims: 768}, &fakeSearchClient{}, &Config{
+		NumWorkers: 2,
+		BatchSize:  10,
+	})
+	if err != nil && err != context.Canceled {
+		t.Errorf("Run returned unexpected error: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected count=0 for empty index, got %d", count)
+	}
+}
+
+func manticoreDSN(t *testing.T) string {
+	t.Helper()
+	dsn := os.Getenv("MANTICORE_DSN")
+	if dsn == "" {
+		t.Skip("MANTICORE_DSN not set")
+	}
+	return dsn
+}
+
+func TestIntegration_Run(t *testing.T) {
+	dsn := manticoreDSN(t)
+	dir := t.TempDir()
+
+	stream0XML := `<page><title>Anarchism</title><ns>0</ns><revision><text xml:space="preserve">Anarchism is a political philosophy.</text></revision></page><page><title>Aardvark</title><ns>0</ns><revision><text xml:space="preserve">The aardvark is a mammal.</text></revision></page>`
+	stream0 := bzip2Compress(t, []byte(stream0XML))
+
+	archivePath := filepath.Join(dir, "archive.bz2")
+	if err := os.WriteFile(archivePath, stream0, 0600); err != nil {
+		t.Fatalf("write archive: %v", err)
+	}
+
+	indexContent := "0:1:Anarchism\n0:2:Aardvark\n"
+	indexData := bzip2Compress(t, []byte(indexContent))
+	indexPath := filepath.Join(dir, "index.bz2")
+	if err := os.WriteFile(indexPath, indexData, 0600); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+
+	arch, err := archive.New(&archive.Config{Path: archivePath, IndexPath: indexPath})
+	if err != nil {
+		t.Fatalf("archive.New: %v", err)
+	}
+	defer arch.Close()
+
+	if err := arch.LoadIndex(); err != nil {
+		t.Fatalf("LoadIndex: %v", err)
+	}
+
+	table := fmt.Sprintf("wiki_test_%d", time.Now().UnixNano())
+	sc, err := manticore.New(&manticore.Config{DSN: dsn, Table: table, EmbedDims: 768})
+	if err != nil {
+		t.Fatalf("manticore.New: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := sc.CreateTable(ctx); err != nil {
+		t.Fatalf("CreateTable: %v", err)
+	}
+
+	count, err := Run(ctx, arch, &fakeEmbedClient{dims: 768}, sc, &Config{
+		NumWorkers: 2,
+		BatchSize:  2,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("Run count = %d, want 2", count)
+	}
+
+	results, err := sc.SearchBM25(ctx, "political", 10)
+	if err != nil {
+		t.Fatalf("SearchBM25: %v", err)
+	}
+	if len(results) == 0 {
+		t.Error("expected at least 1 search result after indexing")
 	}
 }
