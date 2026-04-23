@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tyrm/mcp-wikipedia-local/cmd/mcp-wiki-local/action"
+	"github.com/tyrm/mcp-wikipedia-local/cmd/mcp-wiki-local/action/scan"
 	"github.com/tyrm/mcp-wikipedia-local/cmd/mcp-wiki-local/action/server"
 	"github.com/tyrm/mcp-wikipedia-local/cmd/mcp-wiki-local/flag"
 	"github.com/tyrm/mcp-wikipedia-local/internal/config"
@@ -112,17 +113,17 @@ func serverCommands() *cobra.Command {
 
 // scanCommands returns the 'scan' subcommand.
 func scanCommands() *cobra.Command {
-	serverCmd := &cobra.Command{
+	scanCmd := &cobra.Command{
 		Use:   "scan",
 		Short: "scan the archive",
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			return preRun(cmd)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), server.Start, args)
+			return run(cmd.Context(), scan.Scan, args)
 		},
 	}
-	flag.Server(serverCmd, config.Defaults)
+	flag.Scan(scanCmd, config.Defaults)
 
-	return serverCmd
+	return scanCmd
 }

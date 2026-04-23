@@ -1,44 +1,59 @@
-package server
+package scan
 
 import (
 	"context"
-	"os"
-	"os/signal"
-	"syscall"
 
-	"github.com/tyrm/mcp-wikipedia-local/cmd/mcp-wiki-local/action"
+	"github.com/spf13/viper"
 	"go.uber.org/zap"
+
+	"github.com/tyrm/mcp-wikipedia-local/internal/archive"
+	"github.com/tyrm/mcp-wikipedia-local/internal/config"
+	"github.com/tyrm/mcp-wikipedia-local/internal/embed/ollama"
+	"github.com/tyrm/mcp-wikipedia-local/internal/search/manticore"
+	"github.com/tyrm/mcp-wikipedia-local/internal/worker"
 )
 
-var Scan action.Action = func(ctx context.Context, args []string) error {
-	ctx, cancel := context.WithCancel(ctx)
+func Scan(ctx context.Context, _ []string) error {
+	arch, err := archive.New(&archive.Config{
+		Path:      viper.GetString(config.Keys.ArchivePath),
+		IndexPath: viper.GetString(config.Keys.ArchiveIndexPath),
+	})
+	if err != nil {
+		return err
+	}
+	defer arch.Close()
 
-	// ** start application **
-	errChan := make(chan error)
+	if err := arch.LoadIndex(); err != nil {
+		return err
+	}
+	zap.L().Info("archive index loaded", zap.Int("titles", len(arch.Titles())))
 
-	// Wait for SIGINT and SIGTERM (HIT CTRL-C)
-	stopSigChan := make(chan os.Signal, 1)
-	signal.Notify(stopSigChan, syscall.SIGINT, syscall.SIGTERM)
+	embedClient := ollama.New(&ollama.Config{
+		URL:       viper.GetString(config.Keys.EmbedURL),
+		Model:     viper.GetString(config.Keys.EmbedModel),
+		Dims:      viper.GetInt(config.Keys.EmbedDims),
+		BatchSize: viper.GetInt(config.Keys.EmbedBatchSize),
+	})
 
-	// start webserver
-	//go func(s *http.Server, errChan chan error) {
-	//	zap.L().Info("starting http server")
-	//	err := s.Start()
-	//	if err != nil {
-	//		errChan <- fmt.Errorf("http server: %s", err.Error())
-	//	}
-	//}(httpServer, errChan)
-
-	// wait for event
-	select {
-	case sig := <-stopSigChan:
-		zap.L().Info("got signal", zap.String("signal", sig.String()))
-	case err := <-errChan:
-		zap.L().Fatal("fatal error", zap.Error(err))
+	searchClient, err := manticore.New(&manticore.Config{
+		DSN:       viper.GetString(config.Keys.ManticoreDSN),
+		Table:     viper.GetString(config.Keys.ManticoreTable),
+		BatchSize: viper.GetInt(config.Keys.ManticoreBatchSize),
+		EmbedDims: viper.GetInt(config.Keys.EmbedDims),
+	})
+	if err != nil {
+		return err
 	}
 
-	zap.L().Info("done")
-	cancel()
+	if err := searchClient.CreateTable(ctx); err != nil {
+		return err
+	}
 
-	return nil
+	count, err := worker.Run(ctx, arch, embedClient, searchClient, &worker.Config{
+		NumWorkers:     viper.GetInt(config.Keys.ScanWorkers),
+		BatchSize:      viper.GetInt(config.Keys.ScanBatchSize),
+		CheckpointFile: viper.GetString(config.Keys.ScanCheckpointFile),
+	})
+	zap.L().Info("scan complete", zap.Int64("indexed", count))
+	return err
 }

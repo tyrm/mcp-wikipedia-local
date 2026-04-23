@@ -1,8 +1,9 @@
 package logic
 
 type Logic struct {
+	cfg *Config
 }
 
-func New(_ *Config) *Logic {
-	return &Logic{}
+func New(cfg *Config) *Logic {
+	return &Logic{cfg: cfg}
 }

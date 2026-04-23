@@ -1,3 +1,8 @@
 package manticore
 
-type Config struct{}
+type Config struct {
+	DSN       string
+	Table     string
+	BatchSize int
+	EmbedDims int
+}
