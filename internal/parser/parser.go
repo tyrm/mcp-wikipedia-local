@@ -6,15 +6,25 @@ import (
 )
 
 var (
-	reRedirect    = regexp.MustCompile(`(?i)^#REDIRECT\s*\[\[([^\]|]+)`)
-	reHeading     = regexp.MustCompile(`^(==+)\s*(.+?)\s*\1\s*$`)
-	reRefOpen     = regexp.MustCompile(`(?s)<ref[^>]*>.*?</ref>`)
-	reRefSelf     = regexp.MustCompile(`<ref[^>]*/\s*>`)
-	reBrTag       = regexp.MustCompile(`<br\s*/?>`)
-	reHTMLTag     = regexp.MustCompile(`<[a-zA-Z/][^>]*>`)
-	reExternalLink = regexp.MustCompile(`\[https?://\S+\s+[^\]]+\]`)
+	reRedirect           = regexp.MustCompile(`(?i)^#REDIRECT\s*\[\[([^\]|]+)`)
+	reHeading            = regexp.MustCompile(`^(==+)\s*(.+?)\s*(==+)\s*$`)
+	reRefOpen            = regexp.MustCompile(`(?s)<ref[^>]*>.*?</ref>`)
+	reRefSelf            = regexp.MustCompile(`<ref[^>]*/\s*>`)
+	reBrTag              = regexp.MustCompile(`<br\s*/?>`)
+	reHTMLTag            = regexp.MustCompile(`<[a-zA-Z/][^>]*>`)
+	reExternalLink       = regexp.MustCompile(`\[https?://\S+\s+[^\]]+\]`)
 	reExternalLinkNoText = regexp.MustCompile(`\[https?://\S+\]`)
 )
+
+// matchHeading returns (level, title, true) if line is a valid wikitext heading
+// where the opening and closing marker lengths must match.
+func matchHeading(line string) (int, string, bool) {
+	m := reHeading.FindStringSubmatch(line)
+	if m == nil || len(m[1]) != len(m[3]) {
+		return 0, "", false
+	}
+	return len(m[1]), m[2], true
+}
 
 func ParsePage(title, wikitext string) *ParsedPage {
 	p := &ParsedPage{Title: title}
@@ -67,10 +77,7 @@ func ParsePage(title, wikitext string) *ParsedPage {
 	}
 
 	for line := range strings.SplitSeq(cleaned, "\n") {
-		if m := reHeading.FindStringSubmatch(line); m != nil {
-			level := len(m[1]) / 2
-			heading := m[2]
-
+		if lvl, hdg, ok := matchHeading(line); ok {
 			if inLead {
 				flushSection()
 				inLead = false
@@ -78,13 +85,13 @@ func ParsePage(title, wikitext string) *ParsedPage {
 				flushSection()
 			}
 
-			currentTitle = heading
-			currentLevel = level
+			currentTitle = hdg
+			currentLevel = lvl
 			currentLines = nil
 
 			// emit markdown heading
-			prefix := strings.Repeat("#", level+1)
-			currentLines = append(currentLines, prefix+" "+heading)
+			prefix := strings.Repeat("#", lvl+1)
+			currentLines = append(currentLines, prefix+" "+hdg)
 			continue
 		}
 
@@ -104,7 +111,7 @@ func ExtractLead(wikitext string) string {
 	lines := strings.Split(wikitext, "\n")
 	var result []string
 	for _, line := range lines {
-		if reHeading.MatchString(line) {
+		if _, _, ok := matchHeading(line); ok {
 			break
 		}
 		result = append(result, convertInline(line))

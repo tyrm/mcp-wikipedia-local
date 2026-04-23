@@ -70,9 +70,9 @@ func New(l *logic.Logic, cfg *Config) (*Server, error) {
 
 		var sb strings.Builder
 		for i, r := range results {
-			sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, r.Title))
+			fmt.Fprintf(&sb, "%d. %s\n", i+1, r.Title)
 			if r.LeadSnippet != "" {
-				sb.WriteString(fmt.Sprintf("   %s\n", r.LeadSnippet))
+				fmt.Fprintf(&sb, "   %s\n", r.LeadSnippet)
 			}
 		}
 
