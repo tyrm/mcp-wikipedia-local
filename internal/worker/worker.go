@@ -9,7 +9,9 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
+	"github.com/schollz/progressbar/v3"
 	"go.uber.org/zap"
 
 	"github.com/tyrm/mcp-wikipedia-local/internal/archive"
@@ -28,6 +30,19 @@ func Run(ctx context.Context, arch *archive.Archive, embedClient embed.Client, s
 
 	titles := arch.Titles()
 
+	bar := progressbar.NewOptions(
+		len(titles),
+		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetDescription("indexing"),
+		progressbar.OptionShowCount(),
+		progressbar.OptionShowIts(),
+		progressbar.OptionSetItsString("articles"),
+		progressbar.OptionThrottle(100*time.Millisecond),
+		progressbar.OptionSetPredictTime(true),
+		progressbar.OptionClearOnFinish(),
+		progressbar.OptionSetWidth(40),
+	)
+
 	titleCh := make(chan string, cfg.NumWorkers*2)
 	resultCh := make(chan search.Article, cfg.NumWorkers*2)
 
@@ -40,15 +55,18 @@ func Run(ctx context.Context, arch *archive.Archive, embedClient embed.Client, s
 			for title := range titleCh {
 				offset, ok := arch.OffsetForTitle(title)
 				if !ok {
+					_ = bar.Add(1)
 					continue
 				}
 				if _, alreadyDone := checkpoint[offset]; alreadyDone {
+					_ = bar.Add(1)
 					continue
 				}
 
 				wikitext, err := arch.GetPage(title)
 				if err != nil {
 					zap.L().Error("get page", zap.String("title", title), zap.Error(err))
+					_ = bar.Add(1)
 					continue
 				}
 
@@ -61,6 +79,7 @@ func Run(ctx context.Context, arch *archive.Archive, embedClient embed.Client, s
 					LeadText: lead,
 					Lang:     "en",
 				}
+				_ = bar.Add(1)
 			}
 		})
 	}
@@ -113,10 +132,7 @@ func Run(ctx context.Context, arch *archive.Archive, embedClient embed.Client, s
 				}
 			}
 
-			n := indexed.Add(int64(len(batch)))
-			if n/1000 > (n-int64(len(batch)))/1000 {
-				zap.L().Info("indexing progress", zap.Int64("indexed", n))
-			}
+			indexed.Add(int64(len(batch)))
 
 			batch = batch[:0]
 		}

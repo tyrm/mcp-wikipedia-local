@@ -13,6 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/schollz/progressbar/v3"
 )
 
 type Archive struct {
@@ -42,7 +45,23 @@ func (a *Archive) LoadIndex() error {
 	}
 	defer f.Close()
 
-	r := bzip2.NewReader(f)
+	info, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("stat index: %w", err)
+	}
+
+	bar := progressbar.NewOptions64(
+		info.Size(),
+		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetDescription("loading index"),
+		progressbar.OptionShowBytes(true),
+		progressbar.OptionThrottle(100*time.Millisecond),
+		progressbar.OptionClearOnFinish(),
+		progressbar.OptionSetWidth(40),
+	)
+
+	pr := progressbar.NewReader(f, bar)
+	r := bzip2.NewReader(&pr)
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
