@@ -92,7 +92,7 @@ var Defaults = Values{
 	// Scanner
 	ScanWorkers:        4,
 	ScanBatchSize:      100,
-	ScanCheckpointFile: "",
+	ScanCheckpointFile: "scan-checkpoint.txt",
 
 	// Wikitext
 	WikitextStripInfoboxes: true,

@@ -8,6 +8,9 @@
 *.so
 *.dylib
 
+# Application files
+scan-checkpoint.txt
+
 # Test binary, built with `go test -c`
 *.test
 

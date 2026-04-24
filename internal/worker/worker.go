@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -30,6 +29,16 @@ func Run(ctx context.Context, arch *archive.Archive, embedClient embed.Client, s
 
 	titles := arch.Titles()
 
+	// Pre-count checkpoint-skipped titles so the bar starts at the right position.
+	var resumeAt int
+	if len(checkpoint) > 0 {
+		for _, t := range titles {
+			if _, done := checkpoint[t]; done {
+				resumeAt++
+			}
+		}
+	}
+
 	bar := progressbar.NewOptions(
 		len(titles),
 		progressbar.OptionSetWriter(os.Stderr),
@@ -42,6 +51,9 @@ func Run(ctx context.Context, arch *archive.Archive, embedClient embed.Client, s
 		progressbar.OptionClearOnFinish(),
 		progressbar.OptionSetWidth(40),
 	)
+	if resumeAt > 0 {
+		_ = bar.Set(resumeAt)
+	}
 
 	titleCh := make(chan string, cfg.NumWorkers*2)
 	resultCh := make(chan search.Article, cfg.NumWorkers*2)
@@ -53,13 +65,12 @@ func Run(ctx context.Context, arch *archive.Archive, embedClient embed.Client, s
 	for i := 0; i < cfg.NumWorkers; i++ {
 		workerWg.Go(func() {
 			for title := range titleCh {
-				offset, ok := arch.OffsetForTitle(title)
-				if !ok {
+				if _, ok := arch.OffsetForTitle(title); !ok {
 					_ = bar.Add(1)
 					continue
 				}
-				if _, alreadyDone := checkpoint[offset]; alreadyDone {
-					_ = bar.Add(1)
+				if _, alreadyDone := checkpoint[title]; alreadyDone {
+					// already counted in resumeAt pre-pass, don't double-count
 					continue
 				}
 
@@ -121,13 +132,11 @@ func Run(ctx context.Context, arch *archive.Archive, embedClient embed.Client, s
 			}
 
 			if cfg.CheckpointFile != "" {
-				var offsets []int64
-				for _, a := range batch {
-					if off, ok := arch.OffsetForTitle(a.Title); ok {
-						offsets = append(offsets, off)
-					}
+				titles := make([]string, len(batch))
+				for i, a := range batch {
+					titles[i] = a.Title
 				}
-				if appendErr := appendCheckpoint(cfg.CheckpointFile, offsets); appendErr != nil {
+				if appendErr := appendCheckpoint(cfg.CheckpointFile, titles); appendErr != nil {
 					zap.L().Error("write checkpoint", zap.Error(appendErr))
 				}
 			}
@@ -162,8 +171,8 @@ func Run(ctx context.Context, arch *archive.Archive, embedClient embed.Client, s
 	return indexed.Load(), batchErr
 }
 
-func loadCheckpoint(path string) (map[int64]struct{}, error) {
-	set := make(map[int64]struct{})
+func loadCheckpoint(path string) (map[string]struct{}, error) {
+	set := make(map[string]struct{})
 	if path == "" {
 		return set, nil
 	}
@@ -178,21 +187,17 @@ func loadCheckpoint(path string) (map[int64]struct{}, error) {
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
+		if line != "" {
+			set[line] = struct{}{}
 		}
-		offset, err := strconv.ParseInt(line, 10, 64)
-		if err != nil {
-			continue
-		}
-		set[offset] = struct{}{}
 	}
 	return set, scanner.Err()
 }
 
-func appendCheckpoint(path string, offsets []int64) error {
+func appendCheckpoint(path string, titles []string) error {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
@@ -200,8 +205,8 @@ func appendCheckpoint(path string, offsets []int64) error {
 	defer f.Close()
 
 	w := bufio.NewWriter(f)
-	for _, o := range offsets {
-		if _, err := fmt.Fprintln(w, o); err != nil {
+	for _, t := range titles {
+		if _, err := fmt.Fprintln(w, t); err != nil {
 			return err
 		}
 	}

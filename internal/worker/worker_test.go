@@ -36,11 +36,11 @@ func TestLoadCheckpoint_NonExistentFile(t *testing.T) {
 	}
 }
 
-func TestLoadCheckpoint_ValidOffsets(t *testing.T) {
+func TestLoadCheckpoint_ValidTitles(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "checkpoint.txt")
 
-	content := "100\n200\n300\n"
+	content := "Anarchism\nAlbert Einstein\nAardvark\n"
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
@@ -52,19 +52,18 @@ func TestLoadCheckpoint_ValidOffsets(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("expected 3 entries, got %d", len(got))
 	}
-
-	for _, offset := range []int64{100, 200, 300} {
-		if _, ok := got[offset]; !ok {
-			t.Errorf("expected offset %d to be in map", offset)
+	for _, title := range []string{"Anarchism", "Albert Einstein", "Aardvark"} {
+		if _, ok := got[title]; !ok {
+			t.Errorf("expected title %q to be in map", title)
 		}
 	}
 }
 
-func TestLoadCheckpoint_MixedValidInvalidLines(t *testing.T) {
+func TestLoadCheckpoint_EmptyLines(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "checkpoint.txt")
 
-	content := "100\nnot-a-number\n200\n\n300\nbad\n"
+	content := "Anarchism\n\nAlbert Einstein\n\n\nAardvark\n"
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
@@ -74,12 +73,7 @@ func TestLoadCheckpoint_MixedValidInvalidLines(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(got) != 3 {
-		t.Errorf("expected 3 valid entries, got %d", len(got))
-	}
-	for _, offset := range []int64{100, 200, 300} {
-		if _, ok := got[offset]; !ok {
-			t.Errorf("expected offset %d to be in map", offset)
-		}
+		t.Errorf("expected 3 entries (empty lines skipped), got %d", len(got))
 	}
 }
 
@@ -87,7 +81,7 @@ func TestAppendCheckpoint_CreatesFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "new_checkpoint.txt")
 
-	if err := appendCheckpoint(path, []int64{111, 222}); err != nil {
+	if err := appendCheckpoint(path, []string{"Anarchism", "Aardvark"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -100,10 +94,10 @@ func TestAppendCheckpoint_AppendsToExisting(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "checkpoint.txt")
 
-	if err := appendCheckpoint(path, []int64{100, 200}); err != nil {
+	if err := appendCheckpoint(path, []string{"Anarchism", "Aardvark"}); err != nil {
 		t.Fatalf("first append: %v", err)
 	}
-	if err := appendCheckpoint(path, []int64{300, 400}); err != nil {
+	if err := appendCheckpoint(path, []string{"Albert Einstein", "2001: A Space Odyssey"}); err != nil {
 		t.Fatalf("second append: %v", err)
 	}
 
@@ -114,18 +108,18 @@ func TestAppendCheckpoint_AppendsToExisting(t *testing.T) {
 	if len(got) != 4 {
 		t.Errorf("expected 4 entries after two appends, got %d", len(got))
 	}
-	for _, offset := range []int64{100, 200, 300, 400} {
-		if _, ok := got[offset]; !ok {
-			t.Errorf("expected offset %d in checkpoint", offset)
+	for _, title := range []string{"Anarchism", "Aardvark", "Albert Einstein", "2001: A Space Odyssey"} {
+		if _, ok := got[title]; !ok {
+			t.Errorf("expected title %q in checkpoint", title)
 		}
 	}
 }
 
-func TestAppendCheckpoint_EmptyOffsets(t *testing.T) {
+func TestAppendCheckpoint_EmptySlice(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "checkpoint.txt")
 
-	if err := appendCheckpoint(path, []int64{}); err != nil {
+	if err := appendCheckpoint(path, []string{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -142,9 +136,9 @@ func TestAppendCheckpoint_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "roundtrip.txt")
 
-	offsets := []int64{1024, 2048, 4096, 8192, 16384}
+	titles := []string{"Anarchism", "Albert Einstein", "Aardvark", "2001: A Space Odyssey", "Go (programming language)"}
 
-	if err := appendCheckpoint(path, offsets); err != nil {
+	if err := appendCheckpoint(path, titles); err != nil {
 		t.Fatalf("append: %v", err)
 	}
 
@@ -152,26 +146,26 @@ func TestAppendCheckpoint_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if len(got) != len(offsets) {
-		t.Fatalf("expected %d entries, got %d", len(offsets), len(got))
+	if len(got) != len(titles) {
+		t.Fatalf("expected %d entries, got %d", len(titles), len(got))
 	}
-	for _, o := range offsets {
-		if _, ok := got[o]; !ok {
-			t.Errorf("offset %d not found after round-trip", o)
+	for _, title := range titles {
+		if _, ok := got[title]; !ok {
+			t.Errorf("title %q not found after round-trip", title)
 		}
 	}
 }
 
-func TestAppendCheckpoint_LargeOffsets(t *testing.T) {
+func TestAppendCheckpoint_LargeBatch(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "large.txt")
 
-	var offsets []int64
+	titles := make([]string, 1000)
 	for i := range 1000 {
-		offsets = append(offsets, int64(i)*512)
+		titles[i] = fmt.Sprintf("Article %d", i)
 	}
 
-	if err := appendCheckpoint(path, offsets); err != nil {
+	if err := appendCheckpoint(path, titles); err != nil {
 		t.Fatalf("append: %v", err)
 	}
 
@@ -188,7 +182,7 @@ func TestLoadCheckpoint_WhitespaceHandling(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "checkpoint.txt")
 
-	content := "  100  \n\t200\t\n300\n"
+	content := "  Anarchism  \n\tAlbert Einstein\t\nAardvark\n"
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
@@ -206,15 +200,15 @@ func TestAppendCheckpoint_MultipleRoundTrips(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "multi.txt")
 
-	allOffsets := make(map[int64]struct{})
+	allTitles := make(map[string]struct{})
 	for batch := range 5 {
-		var offsets []int64
+		var titles []string
 		for i := range 10 {
-			o := int64(batch*1000 + i)
-			offsets = append(offsets, o)
-			allOffsets[o] = struct{}{}
+			title := fmt.Sprintf("Article %d-%d", batch, i)
+			titles = append(titles, title)
+			allTitles[title] = struct{}{}
 		}
-		if err := appendCheckpoint(path, offsets); err != nil {
+		if err := appendCheckpoint(path, titles); err != nil {
 			t.Fatalf("batch %d append: %v", batch, err)
 		}
 	}
@@ -223,21 +217,21 @@ func TestAppendCheckpoint_MultipleRoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if len(got) != len(allOffsets) {
-		t.Errorf("expected %d entries, got %d", len(allOffsets), len(got))
+	if len(got) != len(allTitles) {
+		t.Errorf("expected %d entries, got %d", len(allTitles), len(got))
 	}
-	for o := range allOffsets {
-		if _, ok := got[o]; !ok {
-			t.Errorf("offset %d missing after multi-batch round-trip", o)
+	for title := range allTitles {
+		if _, ok := got[title]; !ok {
+			t.Errorf("title %q missing after multi-batch round-trip", title)
 		}
 	}
 }
 
-func TestLoadCheckpoint_DuplicateOffsets(t *testing.T) {
+func TestLoadCheckpoint_DuplicateTitles(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "dupes.txt")
 
-	content := fmt.Sprintf("%d\n%d\n%d\n", 100, 100, 200)
+	content := "Anarchism\nAnarchism\nAardvark\n"
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
