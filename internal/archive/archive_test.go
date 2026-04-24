@@ -250,7 +250,7 @@ func TestOffsetForTitle_TitleWithColon(t *testing.T) {
 		t.Fatalf("write archive: %v", err)
 	}
 
-	indexContent := "0:1:Anarchism\n627:2:Albert Einstein\n1254:3:Aardvark\n1881:4:Talk:Foo\n"
+	indexContent := "0:1:Anarchism\n627:2:Albert Einstein\n1254:3:Aardvark\n1881:4:2001: A Space Odyssey\n"
 	indexData := bzip2Compress(t, []byte(indexContent))
 	indexPath := filepath.Join(dir, "index.bz2")
 	if err := os.WriteFile(indexPath, indexData, 0600); err != nil {
@@ -267,12 +267,18 @@ func TestOffsetForTitle_TitleWithColon(t *testing.T) {
 		t.Fatalf("LoadIndex: %v", err)
 	}
 
-	offset, ok := arch.OffsetForTitle("Talk:Foo")
+	offset, ok := arch.OffsetForTitle("2001: A Space Odyssey")
 	if !ok {
-		t.Fatal("OffsetForTitle(\"Talk:Foo\") ok = false, want true")
+		t.Fatal("OffsetForTitle(\"2001: A Space Odyssey\") ok = false, want true")
 	}
 	if offset != 1881 {
-		t.Errorf("OffsetForTitle(\"Talk:Foo\") = %d, want 1881", offset)
+		t.Errorf("OffsetForTitle(\"2001: A Space Odyssey\") = %d, want 1881", offset)
+	}
+
+	// Talk: namespace titles must be excluded from the article index.
+	_, ok = arch.OffsetForTitle("Talk:Foo")
+	if ok {
+		t.Error("OffsetForTitle(\"Talk:Foo\") should be filtered out")
 	}
 }
 

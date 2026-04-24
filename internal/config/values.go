@@ -23,6 +23,7 @@ type Values struct {
 	// Embedding
 	EmbedProvider  string
 	EmbedURL       string
+	EmbedAPIKey    string
 	EmbedModel     string
 	EmbedDims      int
 	EmbedBatchSize int
@@ -74,6 +75,7 @@ var Defaults = Values{
 	// Embedding
 	EmbedProvider:  "ollama",
 	EmbedURL:       "http://localhost:11434",
+	EmbedAPIKey:    "",
 	EmbedModel:     "nomic-embed-text",
 	EmbedDims:      768,
 	EmbedBatchSize: 32,

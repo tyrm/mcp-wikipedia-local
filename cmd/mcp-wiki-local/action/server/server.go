@@ -14,7 +14,7 @@ import (
 	"github.com/tyrm/mcp-wikipedia-local/internal/archive"
 	"github.com/tyrm/mcp-wikipedia-local/internal/cache"
 	"github.com/tyrm/mcp-wikipedia-local/internal/config"
-	"github.com/tyrm/mcp-wikipedia-local/internal/embed/ollama"
+	"github.com/tyrm/mcp-wikipedia-local/internal/embed"
 	"github.com/tyrm/mcp-wikipedia-local/internal/logic"
 	mcpserver "github.com/tyrm/mcp-wikipedia-local/internal/mcp"
 	"github.com/tyrm/mcp-wikipedia-local/internal/obs"
@@ -35,12 +35,17 @@ var Start action.Action = func(ctx context.Context, _ []string) error {
 	}
 	zap.L().Info("archive loaded", zap.Int("titles", len(arch.Titles())))
 
-	embedClient := ollama.New(&ollama.Config{
+	embedClient, err := embed.NewClient(&embed.Config{
+		Provider:  viper.GetString(config.Keys.EmbedProvider),
 		URL:       viper.GetString(config.Keys.EmbedURL),
+		APIKey:    viper.GetString(config.Keys.EmbedAPIKey),
 		Model:     viper.GetString(config.Keys.EmbedModel),
 		Dims:      viper.GetInt(config.Keys.EmbedDims),
 		BatchSize: viper.GetInt(config.Keys.EmbedBatchSize),
 	})
+	if err != nil {
+		return err
+	}
 
 	searchClient, err := manticore.New(&manticore.Config{
 		DSN:       viper.GetString(config.Keys.ManticoreDSN),

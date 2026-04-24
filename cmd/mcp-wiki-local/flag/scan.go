@@ -14,6 +14,7 @@ func Scan(cmd *cobra.Command, values config.Values) {
 	cmd.Flags().Int(config.Keys.ManticoreBatchSize, values.ManticoreBatchSize, usage.ManticoreBatchSize)
 	cmd.Flags().String(config.Keys.EmbedProvider, values.EmbedProvider, usage.EmbedProvider)
 	cmd.Flags().String(config.Keys.EmbedURL, values.EmbedURL, usage.EmbedURL)
+	cmd.Flags().String(config.Keys.EmbedAPIKey, values.EmbedAPIKey, usage.EmbedAPIKey)
 	cmd.Flags().String(config.Keys.EmbedModel, values.EmbedModel, usage.EmbedModel)
 	cmd.Flags().Int(config.Keys.EmbedDims, values.EmbedDims, usage.EmbedDims)
 	cmd.Flags().Int(config.Keys.EmbedBatchSize, values.EmbedBatchSize, usage.EmbedBatchSize)

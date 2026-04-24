@@ -23,6 +23,7 @@ type KeyNames struct {
 	// Embedding
 	EmbedProvider  string
 	EmbedURL       string
+	EmbedAPIKey    string
 	EmbedModel     string
 	EmbedDims      string
 	EmbedBatchSize string
@@ -74,6 +75,7 @@ var Keys = KeyNames{
 	// Embedding
 	EmbedProvider:  "embed-provider",
 	EmbedURL:       "embed-url",
+	EmbedAPIKey:    "embed-api-key",
 	EmbedModel:     "embed-model",
 	EmbedDims:      "embed-dims",
 	EmbedBatchSize: "embed-batch-size",

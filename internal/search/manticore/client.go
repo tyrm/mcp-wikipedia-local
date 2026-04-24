@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	"github.com/tyrm/mcp-wikipedia-local/internal/search"
 )
 
@@ -18,7 +18,15 @@ type Client struct {
 }
 
 func New(cfg *Config) (*Client, error) {
-	db, err := sql.Open("mysql", cfg.DSN)
+	// Manticore doesn't support the MySQL binary prepared-statement protocol
+	// for FLOAT_VECTOR columns. Force interpolateParams so the driver uses
+	// plain COM_QUERY instead of COM_STMT_PREPARE / COM_STMT_EXECUTE.
+	dsnCfg, err := mysql.ParseDSN(cfg.DSN)
+	if err != nil {
+		return nil, fmt.Errorf("parse dsn: %w", err)
+	}
+	dsnCfg.InterpolateParams = true
+	db, err := sql.Open("mysql", dsnCfg.FormatDSN())
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
@@ -36,7 +44,7 @@ func (c *Client) CreateTable(ctx context.Context) error {
   lang string,
   is_disambig bool,
   lead_embedding float_vector knn_dims='%d' hnsw_similarity='cosine'
-) engine='columnar'`, c.cfg.Table, c.cfg.EmbedDims)
+)`, c.cfg.Table, c.cfg.EmbedDims)
 	_, err := c.db.ExecContext(ctx, q)
 	if err != nil {
 		return fmt.Errorf("create table: %w", err)
@@ -73,7 +81,7 @@ func (c *Client) insertBatch(ctx context.Context, articles []search.Article) err
 	}
 
 	var sb strings.Builder
-	sb.WriteString("INSERT INTO ")
+	sb.WriteString("REPLACE INTO ")
 	sb.WriteString(c.cfg.Table)
 	sb.WriteString(" (id,title,lead_text,lang,is_disambig,lead_embedding) VALUES ")
 

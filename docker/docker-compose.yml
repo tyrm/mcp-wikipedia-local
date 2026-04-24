@@ -1,0 +1,18 @@
+services:
+  manticore:
+    image: manticoresearch/manticore:6.3.6
+    container_name: mcp-wiki-local-manticore
+    restart: unless-stopped
+    ports:
+      - "9306:9306"   # MySQL protocol — set MANTICORE_DSN=root:@tcp(localhost:9306)/
+      - "9308:9308"   # HTTP API (optional, for debugging)
+    volumes:
+      - manticore-data:/var/lib/manticore
+      - ./manticore.conf:/etc/manticoresearch/manticore.conf
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+volumes:
+  manticore-data:

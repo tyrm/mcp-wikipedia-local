@@ -5,6 +5,7 @@ import (
 	"compress/bzip2"
 	"encoding/xml"
 	"fmt"
+	"html"
 	"io"
 	"os"
 	"slices"
@@ -59,13 +60,16 @@ func (a *Archive) LoadIndex() error {
 		}
 
 		offsetStr := line[:first]
-		title := line[first+1+second+1:]
+		title := html.UnescapeString(line[first+1+second+1:])
 
 		offset, err := strconv.ParseInt(offsetStr, 10, 64)
 		if err != nil {
 			continue
 		}
 
+		if !isArticleTitle(title) {
+			continue
+		}
 		a.index[title] = offset
 		offsetSet[offset] = struct{}{}
 	}
@@ -133,6 +137,30 @@ func (a *Archive) OffsetForTitle(title string) (int64, bool) {
 
 func (a *Archive) Close() error {
 	return a.file.Close()
+}
+
+// wikipediaNamespaces lists all non-article namespace prefixes in English Wikipedia.
+var wikipediaNamespaces = map[string]struct{}{
+	"talk": {}, "user": {}, "user talk": {}, "wikipedia": {}, "wikipedia talk": {},
+	"file": {}, "file talk": {}, "mediawiki": {}, "mediawiki talk": {},
+	"template": {}, "template talk": {}, "help": {}, "help talk": {},
+	"category": {}, "category talk": {}, "portal": {}, "portal talk": {},
+	"book": {}, "book talk": {}, "draft": {}, "draft talk": {},
+	"timedtext": {}, "timedtext talk": {}, "module": {}, "module talk": {},
+	"gadget": {}, "gadget talk": {}, "gadget definition": {}, "gadget definition talk": {},
+	"education program": {}, "education program talk": {},
+	"special": {}, "media": {},
+}
+
+// isArticleTitle returns true if title belongs to the main (NS=0) namespace.
+func isArticleTitle(title string) bool {
+	if i := strings.Index(title, ":"); i > 0 {
+		prefix := strings.ToLower(title[:i])
+		if _, ok := wikipediaNamespaces[prefix]; ok {
+			return false
+		}
+	}
+	return true
 }
 
 type xmlPage struct {

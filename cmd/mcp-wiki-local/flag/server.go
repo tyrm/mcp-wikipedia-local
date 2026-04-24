@@ -16,6 +16,7 @@ func Server(cmd *cobra.Command, values config.Values) {
 	cmd.Flags().String(config.Keys.ManticoreTable, values.ManticoreTable, usage.ManticoreTable)
 	cmd.Flags().String(config.Keys.EmbedProvider, values.EmbedProvider, usage.EmbedProvider)
 	cmd.Flags().String(config.Keys.EmbedURL, values.EmbedURL, usage.EmbedURL)
+	cmd.Flags().String(config.Keys.EmbedAPIKey, values.EmbedAPIKey, usage.EmbedAPIKey)
 	cmd.Flags().String(config.Keys.EmbedModel, values.EmbedModel, usage.EmbedModel)
 	cmd.Flags().Int(config.Keys.EmbedDims, values.EmbedDims, usage.EmbedDims)
 	cmd.Flags().Int64(config.Keys.CacheMaxSizeMB, values.CacheMaxSizeMB, usage.CacheMaxSizeMB)
